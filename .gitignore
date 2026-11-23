@@ -1,0 +1,8 @@
+node_modules/
+.DS_Store
+*.log
+.sites-local/
+demo/*.wav
+demo/*.mp4
+demo/*.png
+demo/*.srt

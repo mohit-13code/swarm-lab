@@ -1,0 +1,18 @@
+export const problems={
+ sphere:{name:'Sphere',subtitle:'One valley. One clear destination.',formula:'f(x, y) = x² + y²',bounds:5,fn:(x,y)=>x*x+y*y,tip:'A smooth bowl with its minimum at (0, 0). A good place to learn how the swarm moves.'},
+ rastrigin:{name:'Rastrigin',subtitle:'Many traps. One global minimum.',formula:'f(x, y) = 20 + x² + y² − 10 cos(2πx) − 10 cos(2πy)',bounds:5.12,fn:(x,y)=>20+x*x+y*y-10*Math.cos(2*Math.PI*x)-10*Math.cos(2*Math.PI*y),tip:'Ripples create local minima. Watch whether the swarm explores or settles too early.'},
+ rosenbrock:{name:'Rosenbrock',subtitle:'Follow the curved valley.',formula:'f(x, y) = (1 − x)² + 100(y − x²)²',bounds:3,fn:(x,y)=>(1-x)**2+100*(y-x*x)**2,tip:'A narrow, curved valley leads to (1, 1). Finding a promising region is easier than finding the bottom.'}
+};
+export function random(seed){let a=Number(seed)>>>0;return()=>{a+=0x6D2B79F5;let t=a;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}}
+export const defaults={problem:'sphere',count:24,w:0.7,c1:1.5,c2:1.5,seed:42,limit:60};
+export function forces(p,g,c,r1,r2){const inertia=p.v.map(v=>c.w*v),personal=p.x.map((x,d)=>c.c1*r1[d]*(p.best[d]-x)),social=p.x.map((x,d)=>c.c2*r2[d]*(g[d]-x));return{inertia,personal,social,raw:inertia.map((v,d)=>v+personal[d]+social[d]),r1,r2,from:[...p.x],oldV:[...p.v],pbest:[...p.best],gbest:[...g]}}
+export class Swarm{
+ constructor(config={}){this.c={...defaults,...config};this.problem=problems[this.c.problem];this.rng=random(this.c.seed);this.iteration=0;this.phase=0;this.steps=0;const b=this.problem.bounds;this.particles=Array.from({length:this.c.count},(_,id)=>{const x=[(this.rng()*2-1)*b,(this.rng()*2-1)*b],v=[(this.rng()*2-1)*b*.1,(this.rng()*2-1)*b*.1],score=this.problem.fn(...x);return{id,x,v,best:[...x],score,bestScore:score,trail:[[...x]],detail:null}});this.updateBest();this.history=[this.bestScore];}
+ updateBest(){const p=this.particles.reduce((a,b)=>a.bestScore<=b.bestScore?a:b);this.best=[...p.best];this.bestScore=p.bestScore;this.bestId=p.id}
+ step(){if(this.iteration>=this.c.limit)return false;const b=this.problem.bounds,vmax=b*.4;
+ if(this.phase===0){for(const p of this.particles){p.detail=forces(p,this.best,this.c,[this.rng(),this.rng()],[this.rng(),this.rng()]);p.v=p.detail.raw.map(v=>Math.max(-vmax,Math.min(vmax,v)));p.detail.used=[...p.v];p.detail.clipped=p.detail.raw.some((v,d)=>v!==p.v[d]);}this.phase=1;}
+ else if(this.phase===1){for(const p of this.particles){p.detail.boundary=false;p.x=p.x.map((x,d)=>{const next=x+p.v[d];if(next< -b||next>b){p.v[d]=0;p.detail.boundary=true;}return Math.max(-b,Math.min(b,next))});p.trail.push([...p.x]);if(p.trail.length>18)p.trail.shift();}this.phase=2;}
+ else if(this.phase===2){for(const p of this.particles)p.score=this.problem.fn(...p.x);this.phase=3;}
+ else {for(const p of this.particles){p.improved=p.score<p.bestScore;if(p.improved){p.best=[...p.x];p.bestScore=p.score}}this.updateBest();this.iteration++;this.history.push(this.bestScore);this.phase=0;}this.steps++;return true;}
+}
+export function handCheck(){const c={w:.5,c1:1,c2:2},p={x:[2,1],v:[.4,-.2],best:[1,1]},g=[0,0],d=forces(p,g,c,[.5,.5],[.25,.25]);const next=p.x.map((x,i)=>x+d.raw[i]);const actual={inertia:d.inertia,personal:d.personal,social:d.social,velocity:d.raw,position:next,fitness:problems.sphere.fn(...next)};const expected={inertia:[.2,-.1],personal:[-.5,0],social:[-1,-.5],velocity:[-1.3,-.6],position:[.7,.4],fitness:.65};const checks=Object.keys(expected).map(key=>({key,expected:expected[key],actual:actual[key],pass:[actual[key]].flat().every((v,i)=>Math.abs(v-[expected[key]].flat()[i])<1e-10)}));return{checks,pass:checks.every(c=>c.pass),detail:d,next};}
